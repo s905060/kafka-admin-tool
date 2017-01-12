@@ -1,3 +1,8 @@
+Requirement
+-----------
+## python2.7+ && kazoo
+https://github.com/python-zk/kazoo
+
 Usage
 -----
 

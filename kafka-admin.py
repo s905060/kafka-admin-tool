@@ -58,47 +58,57 @@ class KafkaReassigner():
         with open(self.file_path, 'w') as fp:
             json.dump(data, fp, sort_keys=True, indent=4)
 
+    def get_topic_replica(self, topic, partitions):
+        total_replica = sum([len(partition_list) for partition_id, partition_list in partitions.iteritems()])
+        total_partition = int(len(self.get_topic_partitions_mapping(topic)['partitions']))
+        replica = int(total_replica/total_partition)
+        return replica
+
+    def replica_validator(self, replica):
+        # Only allow maximum 3 replica
+        if replica < 1:
+            replica = 1
+        elif replica > 3:
+            replica = 3
+        return int(replica)
+
     def decommission(self, topics, decommission_broker_id):
         newbrokerlist = [int(x) for x in self.get_alive_broker_list() if x not in decommission_broker_id]
         final_new_partition_list = []
         alive_brokers_count = int(len(self.get_alive_broker_list()))
-        alive_broker_list = self.get_alive_broker_list()
         decommission_broker_count = int(len(decommission_broker_id))
 
         if len(topics) == 0:
             topics = self.get_topics_list()
 
         for topic in topics:
-            replica_count = int(len(self.get_topic_partitions_mapping(topic)['partitions']['0']))
-            partition_count = int(len(self.get_topics_partition(topic)))
-
-            if (alive_brokers_count - decommission_broker_count) < replica_count:
-                raise ValueError("Replica is greater than alive brokers")
-
             data = self.get_topic_partitions_mapping(topic)
             partitions = data['partitions']
+            replica = self.get_topic_replica(topic, partitions)
+
+            if (alive_brokers_count - decommission_broker_count) < replica:
+                raise ValueError("Replica is greater than alive brokers")
+
+            replica = self.replica_validator(replica)
+
             for partition_id, partition_list in partitions.iteritems():
                 new_partition_list = []
+                partition_list = self.rebalancer(replica, partition_list)
                 for partition in partition_list:
                     if str(partition) in decommission_broker_id:
                         new_replica_list = []
                         final_brokerlist = [int(x) for x in newbrokerlist if int(x) not in partition_list]
-                        replica = int(random.choice(final_brokerlist))
-                        while replica in new_replica_list:
-                            replica = int(random.choice(final_brokerlist))
-                        new_partition_list.append(replica)
+                        replica_id = int(random.choice(final_brokerlist))
+                        while replica_id in new_replica_list:
+                            replica_id = int(random.choice(final_brokerlist))
+                        new_partition_list.append(replica_id)
+                        random.shuffle(new_partition_list)
                     else:
                         new_partition_list.append(int(partition))
-                partitions[partition_id] = random.shuffle(new_partition_list)
                 tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": new_partition_list}
                 final_new_partition_list.append(tmp_dict)
 
-        original_partition_json = {}
-        new_partition_json = {"version": 1, "partitions": final_new_partition_list}
-        print new_partition_json
-        self.write_json_file(new_partition_json)
-        print 'Exported to ' + self.file_path
-        self.zk.stop()
+        self.generate_json(final_new_partition_list)
 
     def recommission(self, topics, recommission_broker_id):
         final_new_partition_list = []
@@ -110,35 +120,38 @@ class KafkaReassigner():
             topics = self.get_topics_list()
 
         for topic in topics:
-            replica_count = int(len(self.get_topic_partitions_mapping(topic)['partitions']['0']))
-
-            if (alive_brokers_count + recommission_broker_count) < replica_count:
-                raise ValueError("Replica is greater than alive brokers")
-
-            replica_count = int(len(self.get_topic_partitions_mapping(topic)['partitions']['0']))
             partition_count = int(len(self.get_topics_partition(topic)))
             data = self.get_topic_partitions_mapping(topic)
             partitions = data['partitions']
+            replica = self.get_topic_replica(topic, partitions)
+
+            if (alive_brokers_count + recommission_broker_count) < replica:
+                raise ValueError("Replica is greater than alive brokers")
+
+            replica = self.replica_validator(replica)
+
             # Broker number greater than topic's partition 
             if (alive_brokers_count - len(recommission_broker_id)) > partition_count:
                 for partition_id, partition_list in partitions.iteritems():
                     new_partition_list = []
+                    partition_list = self.rebalancer(replica, partition_list)
                     for partition in partition_list:
                         new_partition_list.append(int(partition))
-                    partitions[partition_id] = random.shuffle(new_partition_list)
+                    random.shuffle(new_partition_list)
                     tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": new_partition_list}
                     final_new_partition_list.append(tmp_dict)
             else:
-                partition_counter = int((partition_count * replica_count / alive_brokers_count) * len(recommission_broker_id))
+                partition_counter = int((partition_count * replica / alive_brokers_count) * len(recommission_broker_id))
                 for partition_id, partition_list in partitions.iteritems():
+                    partition_list = self.rebalancer(replica, partition_list)
                     if partition_counter > 0:
                         new_partition_list = []
                         new_replica_list = []
                         newbrokerlist = [int(x) for x in alive_broker_list if int(x) not in partition_list]
-                        replica = int(random.choice(newbrokerlist))
-                        while replica in new_replica_list:
-                            replica = int(random.choice(newbrokerlist))
-                        partition_list[-1] = replica
+                        replica_id = int(random.choice(newbrokerlist))
+                        while replica_id in new_replica_list:
+                            replica_id = int(random.choice(newbrokerlist))
+                        partition_list[-1] = replica_id
                         random.shuffle(partition_list)
                         tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                         final_new_partition_list.append(tmp_dict)
@@ -147,6 +160,37 @@ class KafkaReassigner():
                         tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                         final_new_partition_list.append(tmp_dict)
 
+        self.generate_json(final_new_partition_list)
+
+    def rebalancer(self, replica, partition_list):
+        alive_broker_list = self.get_alive_broker_list()
+
+        if len(partition_list) == replica:
+            return partition_list
+
+        elif len(partition_list) < replica:
+            # replica_range will be positive number
+            replica_range = replica - len(partition_list)
+            new_replica_list = []
+            newbrokerlist = [int(x) for x in alive_broker_list if int(x) not in partition_list]
+            for _ in xrange(replica_range):
+                replica = int(random.choice(newbrokerlist))
+                while replica in new_replica_list:
+                    replica = int(random.choice(newbrokerlist))
+                new_replica_list.append(replica)
+            partition_list += new_replica_list
+            random.shuffle(partition_list)
+            return partition_list
+
+        elif len(partition_list) > replica:
+            # replica_range will be negative number
+            replica_range = replica - len(partition_list)
+            random.shuffle(partition_list)
+            del partition_list[replica_range:]
+            random.shuffle(partition_list)
+            return partition_list
+
+    def generate_json(self, final_new_partition_list):
         new_partition_json = {"version": 1, "partitions": final_new_partition_list}
         print new_partition_json
         self.write_json_file(new_partition_json)
@@ -155,59 +199,20 @@ class KafkaReassigner():
 
     def set_replication_factor(self, topics, new_replica):
         final_new_partition_list = []
-        alive_brokers_count = int(len(self.get_alive_broker_list()))
 
         if len(topics) == 0:
             topics = self.get_topics_list()
-        for topic in topics:
-            replica_count = int(len(self.get_topic_partitions_mapping(topic)['partitions']['0']))
 
-            # partition_count = int(len(self.get_topics_partition(topic)))
+        for topic in topics:
             data = self.get_topic_partitions_mapping(topic)
             partitions = data['partitions']
 
-            if replica_count == new_replica:
-                for partition_id, partition_list in partitions.iteritems():
-                    new_partition_list = []
-                    for partition in partition_list:
-                        new_partition_list.append(int(partition))
-                    partitions[partition_id] = new_partition_list
-                    tmp_dict = {"topic": topic, "partition": int(partition_id) , "replicas": new_partition_list}
-                    final_new_partition_list.append(tmp_dict)
-            elif replica_count < new_replica:
-                # replica_range will be positive number
-                replica_range = new_replica - replica_count
-                alive_broker_list = self.get_alive_broker_list()
-                for partition_id, partition_list in partitions.iteritems():
-                    new_partition_list = []
-                    new_replica_list = []
-                    newbrokerlist = [int(x) for x in alive_broker_list if int(x) not in partition_list]
-                    for _ in xrange(replica_range):
-                        replica = int(random.choice(newbrokerlist))
-                        while replica in new_replica_list:
-                            replica = int(random.choice(newbrokerlist))
-                        new_replica_list.append(replica)
-                    partition_list += new_replica_list
-                    random.shuffle(partition_list)
-                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
-                    final_new_partition_list.append(tmp_dict)
+            for partition_id, partition_list in partitions.iteritems():
+                partition_list = self.rebalancer(replica, partition_list)
+                tmp_dict = {"topic": topic, "partition": int(partition_id) , "replicas": partition_list}
+                final_new_partition_list.append(tmp_dict)
 
-            elif replica_count > new_replica:
-                # replica_range will be negative number
-                replica_range = new_replica - replica_count
-                for partition_id, partition_list in partitions.iteritems():
-                    new_partition_list = []
-                    random.shuffle(partition_list)
-                    del partition_list[replica_range:]
-                    random.shuffle(partition_list)
-                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
-                    final_new_partition_list.append(tmp_dict)
-
-        new_partition_json = {"version": 1, "partitions": final_new_partition_list}
-        print new_partition_json
-        self.write_json_file(new_partition_json)
-        print 'Exported to ' + self.file_path
-        self.zk.stop()
+        self.generate_json(final_new_partition_list)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simple Kafka Decommission/Recommission tool')

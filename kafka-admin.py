@@ -135,7 +135,6 @@ class KafkaReassigner():
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     partition_list = [int(partition) for partition in partition_list ]
-                    random.shuffle(partition_list)
                     tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                     final_new_partition_list.append(tmp_dict)
             else:
@@ -143,7 +142,6 @@ class KafkaReassigner():
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     if partition_counter > 0:
-                        new_partition_list = []
                         new_replica_list = []
                         newbrokerlist = [int(x) for x in alive_broker_list if int(x) not in partition_list]
                         replica_id = int(random.choice(newbrokerlist))
@@ -177,16 +175,14 @@ class KafkaReassigner():
                     replica = int(random.choice(newbrokerlist))
                 new_replica_list.append(replica)
             partition_list += new_replica_list
-            random.shuffle(partition_list)
-            return partition_list
+            return random.shuffle(partition_list)
 
         elif len(partition_list) > replica:
             # replica_range will be negative number
             replica_range = replica - len(partition_list)
             random.shuffle(partition_list)
             del partition_list[replica_range:]
-            random.shuffle(partition_list)
-            return partition_list
+            return random.shuffle(partition_list)
 
     def generate_json(self, final_new_partition_list):
         new_partition_json = {"version": 1, "partitions": final_new_partition_list}

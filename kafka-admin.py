@@ -130,15 +130,13 @@ class KafkaReassigner():
 
             replica = self.replica_validator(replica)
 
-            # Broker number greater than topic's partition 
-            if (alive_brokers_count - len(recommission_broker_id)) > partition_count:
+            # Broker number greater than topic's partition, no need to change replica layout
+            if (alive_brokers_count - len(recommission_broker_id)) >= partition_count:
                 for partition_id, partition_list in partitions.iteritems():
-                    new_partition_list = []
                     partition_list = self.rebalancer(replica, partition_list)
-                    for partition in partition_list:
-                        new_partition_list.append(int(partition))
-                    random.shuffle(new_partition_list)
-                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": new_partition_list}
+                    partition_list = [int(partition) for partition in partition_list ]
+                    random.shuffle(partition_list)
+                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                     final_new_partition_list.append(tmp_dict)
             else:
                 partition_counter = int((partition_count * replica / alive_brokers_count) * len(recommission_broker_id))

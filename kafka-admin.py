@@ -138,7 +138,7 @@ class KafkaReassigner():
                     tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                     final_new_partition_list.append(tmp_dict)
             else:
-                partition_counter = int((partition_count * replica / alive_brokers_count) * len(recommission_broker_id))
+                partition_counter = int(((partition_count * replica) / alive_brokers_count) * len(recommission_broker_id))
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     if partition_counter > 0:

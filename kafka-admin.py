@@ -64,6 +64,11 @@ class KafkaReassigner():
         replica = int(total_replica/total_partition)
         return replica
 
+    def print_topics_list(self):
+        topics = self.zk_query_list('/brokers/topics')
+        topics_formatted = ', '.join(topics)
+        return topics_formatted
+
     def replica_validator(self, replica):
         # Only allow maximum 3 replica
         if replica < 1:
@@ -182,7 +187,7 @@ class KafkaReassigner():
             replica_range = replica - len(partition_list)
             random.shuffle(partition_list)
             del partition_list[replica_range:]
-            return random.shuffle(partition_list)
+            return partition_list
 
     def generate_json(self, final_new_partition_list):
         new_partition_json = {"version": 1, "partitions": final_new_partition_list}
@@ -212,10 +217,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Simple Kafka Decommission/Recommission tool')
     parser.add_argument("-z", "--zookeeper", type=str, help="Zookeeper server hostname:port", required=True)
     parser.add_argument("-t", "--topics", type=str, help="Topics comma-separated list, will ressign all topics if not specifying any topics", default="")
-    parser.add_argument("-m", "--mode", type=str, choices=["decommission", "recommission", "set-replica"], help="Mode", required=True)
+    parser.add_argument("-m", "--mode", type=str, choices=["decommission", "recommission", "set-replica", "print-topic-list"], help="Mode", required=True)
     parser.add_argument("-r", "--replica", type=str, help="Set Replication Factor")
     parser.add_argument("-b", "--brokers", type=str, help="Brokers ID comma-separated list")
-    parser.add_argument("-f", "--file_path", type=str, help="Output JSON file path", required=True)
+    parser.add_argument("-f", "--file_path", type=str, help="Output JSON file path", default="/tmp/afka-admin-output.json")
     args = parser.parse_args()
 
     zookeeper_server = args.zookeeper
@@ -223,6 +228,7 @@ if __name__ == '__main__':
         topics = args.topics.split(',')
     else:
         topics = args.topics
+
     file_path = args.file_path
     mode = args.mode
 
@@ -242,3 +248,6 @@ if __name__ == '__main__':
             raise ValueError("Missing replica parameter or replica greater than 3")
         kafkareassigner = KafkaReassigner(zookeeper_server, file_path)
         kafkareassigner.set_replication_factor(topics, replica)
+    elif mode == 'print-topic-list':
+        kafkareassigner = KafkaReassigner(zookeeper_server, file_path)
+        print kafkareassigner.print_topics_list()

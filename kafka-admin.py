@@ -77,11 +77,11 @@ class KafkaReassigner():
             replica = 3
         return int(replica)
 
-    def decommission(self, topics, decommission_broker_id):
-        newbrokerlist = [int(x) for x in self.get_alive_broker_list() if x not in decommission_broker_id]
+    def decommission(self, topics, decommission_broker_list):
+        newbrokerlist = [int(x) for x in self.get_alive_broker_list() if x not in decommission_broker_list]
         final_new_partition_list = []
         alive_brokers_count = int(len(self.get_alive_broker_list()))
-        decommission_broker_count = int(len(decommission_broker_id))
+        decommission_broker_count = int(len(decommission_broker_list))
 
         if len(topics) == 0:
             topics = self.get_topics_list()
@@ -100,7 +100,7 @@ class KafkaReassigner():
                 new_partition_list = []
                 partition_list = self.rebalancer(replica, partition_list)
                 for partition in partition_list:
-                    if str(partition) in decommission_broker_id:
+                    if str(partition) in decommission_broker_list:
                         new_replica_list = []
                         final_brokerlist = [int(x) for x in newbrokerlist if int(x) not in partition_list]
                         replica_id = int(random.choice(final_brokerlist))
@@ -115,11 +115,10 @@ class KafkaReassigner():
 
         self.generate_json(final_new_partition_list)
 
-    def recommission(self, topics, recommission_broker_id):
+    def recommission(self, topics, recommission_broker_list):
         final_new_partition_list = []
         alive_brokers_count = int(len(self.get_alive_broker_list()))
-        alive_broker_list = self.get_alive_broker_list()
-        recommission_broker_count = int(len(recommission_broker_id))
+        recommission_broker_count = int(len(recommission_broker_list))
 
         if len(topics) == 0:
             topics = self.get_topics_list()
@@ -136,19 +135,19 @@ class KafkaReassigner():
             replica = self.replica_validator(replica)
 
             # Broker number greater than topic's partition, no need to change replica layout
-            if (alive_brokers_count - len(recommission_broker_id)) >= partition_count:
+            if (alive_brokers_count - len(recommission_broker_list)) >= partition_count:
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     partition_list = [int(partition) for partition in partition_list ]
                     tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
                     final_new_partition_list.append(tmp_dict)
             else:
-                partition_counter = int(((partition_count * replica) / alive_brokers_count) * len(recommission_broker_id))
+                partition_counter = int(((partition_count * replica) / alive_brokers_count) * len(recommission_broker_list))
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     if partition_counter > 0:
                         new_replica_list = []
-                        newbrokerlist = [int(x) for x in alive_broker_list if int(x) not in partition_list]
+                        newbrokerlist = [int(x) for x in recommission_broker_list if int(x) not in partition_list]
                         replica_id = int(random.choice(newbrokerlist))
                         while replica_id in new_replica_list:
                             replica_id = int(random.choice(newbrokerlist))

@@ -151,10 +151,9 @@ class KafkaReassigner():
                 partition_list = self.rebalancer(replica, partition_list)
                 for partition in partition_list:
                     if str(partition) in decommission_broker_list:
-                        new_replica_list = []
                         final_brokerlist = [int(x) for x in newbrokerlist if int(x) not in partition_list]
                         replica_id = int(random.choice(final_brokerlist))
-                        while replica_id in new_replica_list:
+                        while replica_id in partition_list:
                             replica_id = int(random.choice(final_brokerlist))
                         new_partition_list.append(replica_id)
                         random.shuffle(new_partition_list)
@@ -196,10 +195,9 @@ class KafkaReassigner():
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     if partition_counter > 0:
-                        new_replica_list = []
                         newbrokerlist = [int(x) for x in recommission_broker_list if int(x) not in partition_list]
                         replica_id = int(random.choice(newbrokerlist))
-                        while replica_id in new_replica_list:
+                        while replica_id in partition_list:
                             replica_id = int(random.choice(newbrokerlist))
                         partition_list[-1] = replica_id
                         random.shuffle(partition_list)

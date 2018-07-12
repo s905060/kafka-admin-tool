@@ -153,7 +153,7 @@ class KafkaReassigner():
                     if str(partition) in decommission_broker_list:
                         final_brokerlist = [int(x) for x in newbrokerlist if int(x) not in partition_list]
                         replica_id = int(random.choice(final_brokerlist))
-                        while replica_id in partition_list:
+                        while replica_id in new_partition_list:
                             replica_id = int(random.choice(final_brokerlist))
                         new_partition_list.append(replica_id)
                         random.shuffle(new_partition_list)

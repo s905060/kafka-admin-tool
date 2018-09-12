@@ -103,6 +103,7 @@ class KafkaReassigner():
 
     def revokeleadership(self, topics, broker):
         final_new_partition_list = []
+        newbrokerlist = [int(x) for x in self.get_alive_broker_list()]
 
         if len(topics) == 0:
             topics = self.get_topics_list()
@@ -121,6 +122,11 @@ class KafkaReassigner():
                     else:
                         new_partition_list = partition_list
                 else:
+                    replica_id = int(random.choice(newbrokerlist))
+                    if int(broker) == int(partition_list[0]):
+                        while int(replica_id) == int(partition_list[0]):
+                            replica_id = int(random.choice(newbrokerlist))
+                        partition_list = [replica_id]
                     new_partition_list = partition_list
                 tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": new_partition_list}
                 final_new_partition_list.append(tmp_dict)

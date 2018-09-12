@@ -159,13 +159,13 @@ class KafkaReassigner():
                     if str(partition) in decommission_broker_list:
                         final_brokerlist = [int(x) for x in newbrokerlist if int(x) not in partition_list]
                         replica_id = int(random.choice(final_brokerlist))
-                        while replica_id in partition_list:
+                        while replica_id in new_partition_list:
                             replica_id = int(random.choice(final_brokerlist))
                         new_partition_list.append(replica_id)
                         random.shuffle(new_partition_list)
                     else:
                         new_partition_list.append(int(partition))
-                tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": new_partition_list}
+                tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": list(set(new_partition_list))}
                 final_new_partition_list.append(tmp_dict)
 
         self.generate_json(final_new_partition_list)
@@ -194,7 +194,7 @@ class KafkaReassigner():
                 for partition_id, partition_list in partitions.iteritems():
                     partition_list = self.rebalancer(replica, partition_list)
                     partition_list = [int(partition) for partition in partition_list]
-                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
+                    tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": list(set(partition_list))}
                     final_new_partition_list.append(tmp_dict)
             else:
                 partition_counter = int(((partition_count * replica) / alive_brokers_count) * len(recommission_broker_list))
@@ -207,11 +207,11 @@ class KafkaReassigner():
                             replica_id = int(random.choice(newbrokerlist))
                         partition_list[-1] = replica_id
                         random.shuffle(partition_list)
-                        tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
+                        tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": list(set(partition_list))}
                         final_new_partition_list.append(tmp_dict)
                         partition_counter -= 1
                     else:
-                        tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": partition_list}
+                        tmp_dict = {"topic": topic, "partition": int(partition_id), "replicas": list(set(partition_list))}
                         final_new_partition_list.append(tmp_dict)
 
         self.generate_json(final_new_partition_list)
